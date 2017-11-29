@@ -27,10 +27,11 @@ def report(counter, metric_prefix):
     for k, v in counter.iteritems():
         datadog.statsd.gauge('{}.short_lived_containers'.format(metric_prefix), v, tags=["image_name:{}".format(k)])
 
-def determine_name(full_name):
-    domain_removed = full_name.split('/')[-1]
-    tag_removed = domain_removed.split(':')[0]
-    return tag_removed
+def determine_names(container):
+    label = container.labels.get('com.amazonaws.ecs.container-name')
+    if label is not None:
+        return [label]
+    return set(full_name.split('/')[-1].split(':')[0] for full_name in container.image.tags)
 
 def determine_statsd_host(statsd_host):
     if statsd_host:
@@ -65,7 +66,7 @@ def poll(interval, short_lived, statsd_host, statsd_port, metric_prefix):
             if container.status not in ignored_statuses:
                 lifespan = calculate_lifespan(container)
                 if (lifespan is not None) and (lifespan < short_lived):
-                    names = set(determine_name(full_name) for full_name in container.image.tags)
+                    names = determine_names(container)
                     for name in names:
                         counter[name] += 1
         log('Found short-lived containers: {}'.format(counter))
