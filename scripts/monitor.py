@@ -24,7 +24,7 @@ def log(message):
     print('{} {}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), message))
 
 def report(counter, metric_prefix):
-    for k, v in counter.itervalues():
+    for k, v in counter.iteritems():
         datadog.statsd.gauge('{}.short_lived_containers'.format(metric_prefix), v, tags=["image_name:{}".format(k)])
 
 def determine_name(full_name):
