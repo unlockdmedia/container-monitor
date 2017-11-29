@@ -4,24 +4,38 @@
 
 from __future__ import print_function
 import argparse
+import os
 import time
 import datetime
 from collections import Counter
 import docker
+import datadog
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--interval', default=60, help='Number of seconds between each poll')
     parser.add_argument('--short-lived', dest='short_lived', default=300, help='Number of lifespan seconds to be consider short-lived containers')
+    parser.add_argument('--statsd-host', dest='statsd_host', help='Statsd host. if not specified, will fallback to STATSD_HOST, then localhost')
+    parser.add_argument('--statsd-port', dest='statsd_port', default=8125, help='Statsd port')
+    parser.add_argument('--metric-prefix', dest='metric_prefix', default="container_health", help='Datadog Metrics name prefix')
     return parser.parse_args()
 
 def log(message):
     print('{} {}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), message))
 
+def report(counter, metric_prefix):
+    for k, v in counter.itervalues():
+        datadog.statsd.gauge('{}.short_lived_containers'.format(metric_prefix), v, tags=["image_name:{}".format(k)])
+
 def determine_name(full_name):
     domain_removed = full_name.split('/')[-1]
     tag_removed = domain_removed.split(':')[0]
     return tag_removed
+
+def determine_statsd_host(statsd_host):
+    if statsd_host:
+        return statsd_host
+    return os.environ.get('STATSD_HOST', 'localhost')
 
 def calculate_lifespan(container):
     def normalise(datetimestr):
@@ -37,10 +51,12 @@ def calculate_lifespan(container):
         return None
     return seconds
 
-def poll(interval, short_lived):
+def poll(interval, short_lived, statsd_host, statsd_port, metric_prefix):
     client = docker.from_env()
-
+    datadog.initialize(statsd_host=statsd_host, statsd_port=statsd_port)
     ignored_statuses = set(['running', 'paused'])
+
+    log('Started container health polling every {} seconds. Will send stats to {}:{}'.format(interval, statsd_host, statsd_port))
 
     while True:
         containers = client.containers.list(all=True)
@@ -53,12 +69,13 @@ def poll(interval, short_lived):
                     for name in names:
                         counter[name] += 1
         log('Found short-lived containers: {}'.format(counter))
+        report(counter, metric_prefix)
 
         time.sleep(interval)
 
 def main():
     args = get_args()
-    poll(args.interval, args.short_lived)
+    poll(args.interval, args.short_lived, determine_statsd_host(args.statsd_host), args.statsd_port, args.metric_prefix)
 
 if __name__ == '__main__':
     main()

@@ -7,5 +7,5 @@ RUN apk add --no-cache bash tini && \
 
 COPY ["scripts", "/scripts"]
 
-ENTRYPOINT ["/sbin/tini", "--", "/scripts/monitor_short_lived.py"]
+ENTRYPOINT ["/sbin/tini", "--", "/scripts/docker-entrypoint.sh"]
 CMD ["--help"]
