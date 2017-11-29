@@ -5,6 +5,7 @@
 from __future__ import print_function
 import argparse
 import os
+import sys
 import time
 import datetime
 from collections import Counter
@@ -70,6 +71,7 @@ def poll(interval, short_lived, statsd_host, statsd_port, metric_prefix):
                     for name in names:
                         counter[name] += 1
         log('Found short-lived containers: {}'.format(counter))
+        sys.stdout.flush()
         report(counter, metric_prefix)
 
         time.sleep(interval)
