@@ -19,14 +19,15 @@ def get_args():
     parser.add_argument('--statsd-host', dest='statsd_host', help='Statsd host. if not specified, will fallback to STATSD_HOST, then localhost')
     parser.add_argument('--statsd-port', dest='statsd_port', default=8125, help='Statsd port')
     parser.add_argument('--metric-prefix', dest='metric_prefix', default="container_health", help='Datadog Metrics name prefix')
+    parser.add_argument('--metric-tag', dest='metric_tags', default=[], action='append', help='Additional tags to send along Datadog Metrics, can repeat multiple times')
     return parser.parse_args()
 
 def log(message):
     print('{} {}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), message))
 
-def report(counter, metric_prefix):
+def report(counter, metric_prefix, metric_tags):
     for k, v in counter.iteritems():
-        datadog.statsd.gauge('{}.short_lived_containers'.format(metric_prefix), v, tags=["image_name:{}".format(k)])
+        datadog.statsd.gauge('{}.short_lived_containers'.format(metric_prefix), v, tags=["image_name:{}".format(k)] + metric_tags)
 
 def determine_names(container):
     label = container.labels.get('com.amazonaws.ecs.container-name')
@@ -53,7 +54,7 @@ def calculate_lifespan(container):
         return None
     return seconds
 
-def poll(interval, short_lived, statsd_host, statsd_port, metric_prefix):
+def poll(interval, short_lived, statsd_host, statsd_port, metric_prefix, metric_tags):
     client = docker.from_env()
     datadog.initialize(statsd_host=statsd_host, statsd_port=statsd_port)
     ignored_statuses = set(['running', 'paused'])
@@ -72,13 +73,13 @@ def poll(interval, short_lived, statsd_host, statsd_port, metric_prefix):
                         counter[name] += 1
         log('Found short-lived containers: {}'.format(counter))
         sys.stdout.flush()
-        report(counter, metric_prefix)
+        report(counter, metric_prefix, metric_tags)
 
         time.sleep(interval)
 
 def main():
     args = get_args()
-    poll(args.interval, args.short_lived, determine_statsd_host(args.statsd_host), args.statsd_port, args.metric_prefix)
+    poll(args.interval, args.short_lived, determine_statsd_host(args.statsd_host), args.statsd_port, args.metric_prefix, args.metric_tags)
 
 if __name__ == '__main__':
     main()
